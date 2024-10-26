@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"io"
 	"log/slog"
 	"net"
@@ -10,24 +11,28 @@ import (
 	"github.com/pkg/errors"
 )
 
-var pingMsg = []byte(``)
+var pingMsg = []byte(`p`)
 
 type backend struct {
 	addr    *net.TCPAddr
 	conns   int
 	latency time.Duration
+	isAlive bool
 
 	mu *sync.Mutex
 }
 
 func (b *backend) monitor() {
 beginning:
-	b.latency = -1
+	b.isAlive = false
 
 	conn, err := net.DialTCP("tcp", nil, b.addr)
 	if err != nil {
+		time.Sleep(1 * time.Second)
 		goto beginning
 	}
+
+	b.isAlive = true
 
 	for {
 		conn.SetWriteDeadline(time.Now().Add(15 * time.Second))
@@ -39,11 +44,11 @@ beginning:
 		}
 		b.latency = time.Now().Sub(start)
 
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(1 * time.Second)
 	}
 }
 
-func (b *backend) pipe(frontConn *net.TCPConn) error {
+func (b *backend) pipe(frontConn net.Conn) error {
 
 	backConn, err := net.DialTCP("tcp", nil, b.addr)
 	if err != nil {
@@ -84,8 +89,8 @@ func main() {
 	backendAddrs := []string{
 		"localhost:8001",
 		"localhost:8002",
-		"localhost:8003",
 	}
+	useTLS := true
 
 	for _, addr := range backendAddrs {
 
@@ -106,14 +111,30 @@ func main() {
 		return
 	}
 
-	listener, err := net.ListenTCP("tcp", listenAddr)
-	if err != nil {
-		slog.Error("Cannot create listener", "err", err.Error())
-		return
+	var listener net.Listener
+	if useTLS {
+
+		crt, err := tls.LoadX509KeyPair("public.crt", "private.key")
+		if err != nil {
+			slog.Error("Cannot load x509 key-pair", "err", err.Error())
+			return
+		}
+
+		listener, err = tls.Listen("tcp", listenAddr.String(), &tls.Config{Certificates: []tls.Certificate{crt}})
+		if err != nil {
+			slog.Error("Cannot create listener", "err", err.Error())
+			return
+		}
+	} else {
+		listener, err = net.ListenTCP("tcp", listenAddr)
+		if err != nil {
+			slog.Error("Cannot create listener", "err", err.Error())
+			return
+		}
 	}
 
 	for {
-		frontConn, err := listener.AcceptTCP()
+		frontConn, err := listener.Accept()
 		if err != nil {
 			slog.Error("Cannot accept connection", "err", err.Error())
 			continue
@@ -123,12 +144,12 @@ func main() {
 	}
 }
 
-func handleConn(frontConn *net.TCPConn) {
+func handleConn(frontConn net.Conn) {
 	defer frontConn.Close()
 
-	var chosen *backend
+	chosen := backends[0]
 	for _, b := range backends {
-		if b.latency < 0 {
+		if !b.isAlive {
 			continue
 		}
 
