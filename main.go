@@ -1,176 +1,126 @@
 package main
 
 import (
-	"crypto/tls"
-	"io"
+	"flag"
+	"fmt"
 	"log/slog"
 	"net"
-	"sync"
+	"os"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
-var pingMsg = []byte(`p`)
-
-type backend struct {
-	addr    *net.TCPAddr
-	conns   int
-	latency time.Duration
-	isAlive bool
-
-	mu *sync.Mutex
-}
-
-func (b *backend) monitor() {
-beginning:
-	b.isAlive = false
-
-	conn, err := net.DialTCP("tcp", nil, b.addr)
-	if err != nil {
-		time.Sleep(1 * time.Second)
-		goto beginning
-	}
-
-	b.isAlive = true
-
-	for {
-		conn.SetWriteDeadline(time.Now().Add(15 * time.Second))
-
-		start := time.Now()
-		if _, err := conn.Write(pingMsg); err != nil {
-			conn.Close()
-			goto beginning
-		}
-		b.latency = time.Now().Sub(start)
-
-		time.Sleep(1 * time.Second)
-	}
-}
-
-func (b *backend) pipe(frontConn net.Conn) error {
-
-	backConn, err := net.DialTCP("tcp", nil, b.addr)
-	if err != nil {
-		return errors.Wrap(err, "cannot dial backend")
-	}
-
-	b.mu.Lock()
-	b.conns++
-	b.mu.Unlock()
-
-	defer func() {
-		backConn.Close()
-
-		b.mu.Lock()
-		b.conns--
-		b.mu.Unlock()
-	}()
-
-	doneChan := make(chan any, 1)
-
-	go func() {
-		io.Copy(frontConn, backConn)
-		doneChan <- nil
-	}()
-
-	go func() {
-		io.Copy(backConn, frontConn)
-		doneChan <- nil
-	}()
-
-	<-doneChan
-	return nil
-}
-
-var backends = []*backend{}
+var configPath = flag.String("config", "~/config/urithiru.toml", "")
 
 func main() {
-	backendAddrs := []string{
-		"localhost:8001",
-		"localhost:8002",
-	}
-	useTLS := true
+	flag.Parse()
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
 
-	for _, addr := range backendAddrs {
-
-		addr, err := net.ResolveTCPAddr("tcp", addr)
-		if err != nil {
-			slog.Error("Cannot resolve backend-address", "backend_address", addr, "err", err.Error())
-			return
-		}
-
-		b := &backend{addr: addr, mu: &sync.Mutex{}}
-		go b.monitor()
-		backends = append(backends, b)
+	urithiruCfg := urithiruConfig{
+		pingConfig: pingConfig{
+			PingTimeout:           10 * time.Second,
+			PingInterval:          1 * time.Second,
+			PingReconnectInterval: 1 * time.Second,
+		},
 	}
 
-	listenAddr, err := net.ResolveTCPAddr("tcp", "localhost:8000")
-	if err != nil {
-		slog.Error("Cannot resolve listen-address", "listen_address", listenAddr, "err", err.Error())
+	if _, err := toml.DecodeFile(*configPath, &urithiruCfg); err != nil {
+		logger.Error(fmt.Sprintf("Cannot parse config file: %v", err), "config_path", configPath)
 		return
 	}
 
-	var listener net.Listener
-	if useTLS {
-
-		crt, err := tls.LoadX509KeyPair("public.crt", "private.key")
-		if err != nil {
-			slog.Error("Cannot load x509 key-pair", "err", err.Error())
-			return
-		}
-
-		listener, err = tls.Listen("tcp", listenAddr.String(), &tls.Config{Certificates: []tls.Certificate{crt}})
-		if err != nil {
-			slog.Error("Cannot create listener", "err", err.Error())
-			return
-		}
-	} else {
-		listener, err = net.ListenTCP("tcp", listenAddr)
-		if err != nil {
-			slog.Error("Cannot create listener", "err", err.Error())
-			return
-		}
+	errs := &errgroup.Group{}
+	for _, proxyCfg := range urithiruCfg.Proxies {
+		errs.Go(func() error {
+			return startProxy(logger, &urithiruCfg, &proxyCfg)
+		})
 	}
 
-	for {
-		frontConn, err := listener.Accept()
-		if err != nil {
-			slog.Error("Cannot accept connection", "err", err.Error())
-			continue
+	if err := errs.Wait(); err != nil {
+		l := logger
+
+		switch errors.Cause(err).(type) {
+		case *net.AddrError:
+			l = logger.With("config_path", *configPath)
 		}
 
-		go handleConn(frontConn)
+		l.Error(fmt.Sprintf("Proxy error: %v", err))
 	}
 }
 
-func handleConn(frontConn net.Conn) {
-	defer frontConn.Close()
+func startProxy(logger *slog.Logger, urithiruCfg *urithiruConfig, proxyCfg *proxyConfig) error {
+	backends := make([]*backend, len(proxyCfg.Backends))
 
-	chosen := backends[0]
+	for i, backendCfg := range proxyCfg.Backends {
+
+		b, err := newBackend(logger, urithiruCfg, proxyCfg, &backendCfg)
+		if err != nil {
+			return errors.Wrap(err, "cannot create backend")
+		}
+
+		backends[i] = b
+	}
+
+	addr, err := net.ResolveTCPAddr("tcp", proxyCfg.Addr)
+	if err != nil {
+		return errors.Wrap(err, "cannot resolve address")
+	}
+
+	listener, err := net.ListenTCP("tcp", addr)
+	if err != nil {
+		return errors.Wrap(err, "cannot listen")
+	}
+
+	logger.Info(fmt.Sprintf("Proxy %s listening on %s", proxyCfg.Name, proxyCfg.Addr))
+
+	for {
+
+		conn, _ := listener.AcceptTCP()
+		if conn == nil {
+			continue
+		}
+
+		go func() {
+			defer conn.Close()
+			if best := bestBackend(backends); best != nil {
+				best.pipe(conn)
+			}
+		}()
+	}
+}
+
+func bestBackend(backends []*backend) (best *backend) {
 	for _, b := range backends {
 		if !b.isAlive {
 			continue
 		}
 
 		if b.conns == 0 {
-			chosen = b
+			best = b
 			break
 		}
 
-		if chosen == nil {
-			chosen = b
+		if best == nil {
+			best = b
 			continue
 		}
 
-		if b.conns < chosen.conns {
-			chosen = b
-		} else if b.conns == chosen.conns && b.latency < chosen.latency {
-			chosen = b
+		if (b.conns < best.conns) || (b.conns == best.conns && b.latency < best.latency) {
+			best = b
 		}
 	}
 
-	if err := chosen.pipe(frontConn); err != nil {
-		slog.Error("Pipe failed", "err", err.Error())
+	return best
+}
+
+func or[T comparable](s ...T) (ret T) {
+	for _, v := range s {
+		if v != ret {
+			return v
+		}
 	}
+	return ret
 }

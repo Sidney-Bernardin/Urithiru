@@ -1,0 +1,20 @@
+[[ proxies ]]
+name = "foo"
+addr = "localhost:8100"
+
+[[ proxies.backends ]]
+addr = "localhost:8101"
+
+[[ proxies.backends ]]
+addr = "localhost:8102"
+
+
+[[ proxies ]]
+name = "foo"
+addr = "localhost:8200"
+
+[[ proxies.backends ]]
+addr = "localhost:8201"
+
+[[ proxies.backends ]]
+addr = "localhost:8202"
