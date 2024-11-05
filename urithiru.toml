@@ -1,3 +1,8 @@
+pingTimeout = "10s"
+pingInterval = "1s"
+pingReconnectInterval = "1s"
+
+
 [[ proxies ]]
 name = "foo"
 addr = "localhost:8100"
@@ -10,7 +15,7 @@ addr = "localhost:8102"
 
 
 [[ proxies ]]
-name = "foo"
+name = "bar"
 addr = "localhost:8200"
 
 [[ proxies.backends ]]

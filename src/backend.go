@@ -1,4 +1,4 @@
-package main
+package src
 
 import (
 	"io"
@@ -13,9 +13,9 @@ import (
 var pingMsg = []byte(`p`)
 
 type backend struct {
-	urithiruCfg *urithiruConfig
-	proxyCfg    *proxyConfig
-	backendCfg  *backendConfig
+	urithiruCfg *UrithiruConfig
+	proxyCfg    *ProxyConfig
+	backendCfg  *BackendConfig
 
 	logger *slog.Logger
 
@@ -31,7 +31,7 @@ type backend struct {
 	pingReconnectInterval time.Duration
 }
 
-func newBackend(logger *slog.Logger, urithiruCfg *urithiruConfig, proxyCfg *proxyConfig, backendCfg *backendConfig) (*backend, error) {
+func newBackend(logger *slog.Logger, urithiruCfg *UrithiruConfig, proxyCfg *ProxyConfig, backendCfg *BackendConfig) (*backend, error) {
 
 	addr, err := net.ResolveTCPAddr("tcp", backendCfg.Addr)
 	if err != nil {
@@ -114,4 +114,13 @@ func (b *backend) pipe(frontConn net.Conn) {
 	}()
 
 	<-doneChan
+}
+
+func or[T comparable](s ...T) (ret T) {
+	for _, v := range s {
+		if v != ret {
+			return v
+		}
+	}
+	return ret
 }
