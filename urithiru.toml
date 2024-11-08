@@ -1,25 +1,28 @@
-pingTimeout = "10s"
-pingInterval = "1s"
-pingReconnectInterval = "1s"
+# pingTimeout = "10s"
+# pingInterval = "1s"
+# pingReconnectInterval = "1s"
 
 
 [[ proxies ]]
 name = "foo"
-addr = "localhost:8100"
+addr = ":8100"
 
-[[ proxies.backends ]]
-addr = "localhost:8101"
+# [[ proxies.backends ]]
+# addr = "1.2.3.4:8080"
 
-[[ proxies.backends ]]
-addr = "localhost:8102"
+# [[ proxies.backends ]]
+# addr = "1.2.3.4:8080"
+
+# [[ proxies.backends ]]
+# addr = "1.2.3.4:8080"
 
 
-[[ proxies ]]
-name = "bar"
-addr = "localhost:8200"
+# [[ proxies ]]
+# name = "bar"
+# addr = ":8200"
 
-[[ proxies.backends ]]
-addr = "localhost:8201"
+# [[ proxies.backends ]]
+# addr = "1.2.3.4:8080"
 
-[[ proxies.backends ]]
-addr = "localhost:8202"
+# [[ proxies.backends ]]
+# addr = "1.2.3.4:8080"

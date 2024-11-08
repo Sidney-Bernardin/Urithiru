@@ -19,31 +19,23 @@ type backend struct {
 
 	logger *slog.Logger
 
-	addr *net.TCPAddr
-	mu   *sync.Mutex
+	pingTimeout           time.Duration
+	pingInterval          time.Duration
+	pingReconnectInterval time.Duration
+
+	mu *sync.Mutex
 
 	isAlive bool
 	conns   int
 	latency time.Duration
-
-	pingTimeout           time.Duration
-	pingInterval          time.Duration
-	pingReconnectInterval time.Duration
 }
 
-func newBackend(logger *slog.Logger, urithiruCfg *UrithiruConfig, proxyCfg *ProxyConfig, backendCfg *BackendConfig) (*backend, error) {
-
-	addr, err := net.ResolveTCPAddr("tcp", backendCfg.Addr)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot resolve address")
-	}
-
+func newBackend(logger *slog.Logger, urithiruCfg *UrithiruConfig, proxyCfg *ProxyConfig, backendCfg *BackendConfig) *backend {
 	b := &backend{
 		urithiruCfg:           urithiruCfg,
 		proxyCfg:              proxyCfg,
 		backendCfg:            backendCfg,
 		logger:                logger,
-		addr:                  addr,
 		mu:                    &sync.Mutex{},
 		pingTimeout:           or(backendCfg.PingTimeout, proxyCfg.PingTimeout, urithiruCfg.PingTimeout),
 		pingInterval:          or(backendCfg.PingInterval, proxyCfg.PingInterval, urithiruCfg.PingInterval),
@@ -51,20 +43,20 @@ func newBackend(logger *slog.Logger, urithiruCfg *UrithiruConfig, proxyCfg *Prox
 	}
 
 	go b.ping()
-	return b, nil
+	return b
 }
 
 func (b *backend) ping() {
 beginning:
 	b.isAlive = false
 
-	conn, err := net.DialTCP("tcp", nil, b.addr)
+	conn, err := net.Dial("tcp", b.backendCfg.Addr)
 	if err != nil {
 		time.Sleep(b.pingReconnectInterval)
 		goto beginning
 	}
 
-	b.logger.Info("Backend connected", "address", b.addr)
+	b.logger.Info("Backend connected", "address", b.backendCfg.Addr)
 	b.isAlive = true
 
 	for {
@@ -73,7 +65,7 @@ beginning:
 		start := time.Now()
 		if _, err := conn.Write(pingMsg); err != nil {
 			conn.Close()
-			b.logger.Warn("Backend disconnected", "address", b.addr)
+			b.logger.Warn("Backend unresponsive: "+err.Error(), "address", b.backendCfg.Addr)
 			goto beginning
 		}
 		b.latency = time.Now().Sub(start)
@@ -82,11 +74,11 @@ beginning:
 	}
 }
 
-func (b *backend) pipe(frontConn net.Conn) {
+func (b *backend) pipe(frontConn net.Conn) error {
 
-	backConn, _ := net.DialTCP("tcp", nil, b.addr)
+	backConn, _ := net.Dial("tcp", b.backendCfg.Addr)
 	if backConn == nil {
-		return
+		return nil
 	}
 
 	b.mu.Lock()
@@ -101,19 +93,19 @@ func (b *backend) pipe(frontConn net.Conn) {
 		b.mu.Unlock()
 	}()
 
-	doneChan := make(chan any, 1)
+	errChan := make(chan error, 1)
 
 	go func() {
 		io.Copy(frontConn, backConn)
-		doneChan <- nil
+		errChan <- nil
 	}()
 
 	go func() {
-		io.Copy(backConn, frontConn)
-		doneChan <- nil
+		_, err := io.Copy(backConn, frontConn)
+		errChan <- err
 	}()
 
-	<-doneChan
+	return errors.Wrap(<-errChan, "cannot copy to backend connection")
 }
 
 func or[T comparable](s ...T) (ret T) {

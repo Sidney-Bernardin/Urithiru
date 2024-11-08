@@ -2,50 +2,82 @@ package main
 
 import (
 	"context"
-	"flag"
 	"io"
-	"log"
+	"log/slog"
 	"net"
-	"urithiru/src"
+	"os"
+	"os/signal"
+	"sync"
 )
 
-var configPath = flag.String("config", "~/config/urithiru.toml", "Path to configuration file.")
-
 func main() {
-	flag.Parse()
 
-	urithiruCfg, err := src.GetConfig(*configPath)
-	if err != nil {
-		log.Fatalf("Cannot get configuration: %v", err)
+	addr, ok := os.LookupEnv("ADDRESS")
+	if !ok {
+		addr = ":8080"
 	}
 
-	for _, proxyCfg := range urithiruCfg.Proxies {
-		for _, backendCfg := range proxyCfg.Backends {
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		slog.Error("Cannot create listener: "+err.Error(), "address", addr)
+		return
+	}
+
+	slog.Info("Listening", "address", addr)
+
+	var (
+		mu                   = &sync.Mutex{}
+		currentConns         int
+		mostConsecutiveConns int
+	)
+
+	ctx, _ := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				select {
+				case <-ctx.Done():
+					return
+
+				default:
+					slog.Warn("Cannot accept connection: " + err.Error())
+					continue
+				}
+			}
+
+			mu.Lock()
+			currentConns++
+			if currentConns > mostConsecutiveConns {
+				mostConsecutiveConns = currentConns
+			}
+			mu.Unlock()
+
 			go func() {
-				listener, err := net.Listen("tcp", backendCfg.Addr)
-				if err != nil {
-					log.Fatalf("Cannot create %s listener: %v", backendCfg.Addr, err)
+				defer func() {
+					conn.Close()
+
+					mu.Lock()
+					currentConns--
+					mu.Unlock()
+				}()
+
+				if _, err := conn.Write([]byte(addr)); err != nil {
+					slog.Error("Cannot write outgoing data: " + err.Error())
+					return
 				}
 
-				log.Printf("%s is listening", backendCfg.Addr)
-
-				for {
-					conn, err := listener.Accept()
-					if err != nil {
-						log.Printf("%s cannot accept connection: %v", backendCfg, err)
-						continue
-					}
-
-					go func() {
-						defer conn.Close()
-						if _, err := io.Copy(conn, conn); err != nil {
-							log.Printf("%s cannot echo: %v", backendCfg.Addr, err)
-						}
-					}()
+				if _, err := io.Copy(conn, conn); err != nil {
+					slog.Error("Cannot read incoming data: " + err.Error())
+					return
 				}
 			}()
 		}
-	}
+	}()
 
-	<-context.Background().Done()
+	<-ctx.Done()
+	listener.Close()
+
+	slog.Info("Goodbye", "most_consecutive_connections", mostConsecutiveConns)
 }

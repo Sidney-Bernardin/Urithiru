@@ -8,24 +8,13 @@ import (
 )
 
 func StartProxy(logger *slog.Logger, urithiruCfg *UrithiruConfig, proxyCfg *ProxyConfig) error {
+
 	backends := make([]*backend, len(proxyCfg.Backends))
-
 	for i, backendCfg := range proxyCfg.Backends {
-
-		b, err := newBackend(logger, urithiruCfg, proxyCfg, &backendCfg)
-		if err != nil {
-			return errors.Wrap(err, "cannot create backend")
-		}
-
-		backends[i] = b
+		backends[i] = newBackend(logger, urithiruCfg, proxyCfg, &backendCfg)
 	}
 
-	addr, err := net.ResolveTCPAddr("tcp", proxyCfg.Addr)
-	if err != nil {
-		return errors.Wrap(err, "cannot resolve address")
-	}
-
-	listener, err := net.ListenTCP("tcp", addr)
+	listener, err := net.Listen("tcp", proxyCfg.Addr)
 	if err != nil {
 		return errors.Wrap(err, "cannot create listener")
 	}
@@ -33,16 +22,23 @@ func StartProxy(logger *slog.Logger, urithiruCfg *UrithiruConfig, proxyCfg *Prox
 	logger.Info("Proxy listening", "name", proxyCfg.Name, "address", proxyCfg.Addr)
 
 	for {
+		conn, _ := listener.Accept()
 
-		conn, _ := listener.AcceptTCP()
-		if conn == nil {
+		tcpConn, ok := conn.(*net.TCPConn)
+		if conn != nil && !ok {
 			continue
 		}
 
 		go func() {
-			defer conn.Close()
-			if best := bestBackend(backends); best != nil {
-				best.pipe(conn)
+			defer tcpConn.Close()
+
+			best := bestBackend(backends)
+			if best == nil {
+				return
+			}
+
+			if err := best.pipe(tcpConn); err != nil {
+				slog.Error("Cannot pipe connection to backend: "+err.Error(), "address", best.backendCfg.Addr)
 			}
 		}()
 	}

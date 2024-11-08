@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log/slog"
 	"net"
 	_ "net/http/pprof"
@@ -15,7 +14,7 @@ import (
 )
 
 var (
-	configPath = flag.String("config", "~/config/urithiru.toml", "Path to configuration file.")
+	configPath = flag.String("config", "/etc/urithiru/urithiru.toml", "Path to configuration file.")
 	pprofAddr  = flag.String("pprof_addr", ":6060", "")
 )
 
@@ -27,16 +26,13 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
 
 	if servePPROF != nil {
-		logger.Info("PPROF listening",
-			"address", *pprofAddr)
-
+		logger.Info("PPROF listening", "address", *pprofAddr)
 		errs.Go(servePPROF)
 	}
 
 	urithiruCfg, err := src.GetConfig(*configPath)
 	if err != nil {
-		logger.Error(fmt.Sprintf("Cannot get configuration: %v", err),
-			"config_path", *configPath)
+		logger.Error("Cannot get configuration: "+err.Error(), "config_path", *configPath)
 		return
 	}
 
