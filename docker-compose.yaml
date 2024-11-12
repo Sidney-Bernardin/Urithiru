@@ -1,0 +1,32 @@
+services:
+
+  urithiru:
+    container_name: urithiru
+    build: 
+      dockerfile: Dockerfiles/urithiru-${MODE:?error}.dockerfile
+      args:
+        BUILD_TAGS: ${URITHIRU_BUILD_TAGS}
+        CONFIG: ${URITHIRU_CONFIG}
+    ports:
+      - 8000:8000
+      - 6060:6060
+
+  # ==========
+
+  echo1:
+    container_name: echo1
+    build:
+      dockerfile: Dockerfiles/echo.dockerfile
+    profiles: [echo]
+
+  echo2:
+    container_name: echo2
+    build:
+      dockerfile: Dockerfiles/echo.dockerfile
+    profiles: [echo]
+
+  echo3:
+    container_name: echo3
+    build:
+      dockerfile: Dockerfiles/echo.dockerfile
+    profiles: [echo]

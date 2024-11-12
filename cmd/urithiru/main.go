@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	configPath = flag.String("config", "/etc/urithiru/urithiru.toml", "Path to configuration file.")
+	configPath = flag.String("config", "/etc/urithiru/config.toml", "Path to configuration file.")
 	pprofAddr  = flag.String("pprof_addr", ":6060", "")
 )
 
