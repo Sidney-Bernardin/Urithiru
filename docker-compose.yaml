@@ -1,5 +1,14 @@
 services:
 
+  parca:
+    container_name: parca
+    build:
+      dockerfile: Dockerfiles/parca.dockerfile
+    ports:
+      - 7070:7070
+
+  # ==========
+
   urithiru:
     container_name: urithiru
     build: 

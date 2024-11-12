@@ -16,7 +16,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 
 FROM scratch
 
-ARG CONFIG="config.toml"
+ARG CONFIG="urithiru.toml"
 ENV CONFIG=$CONFIG
 
 COPY --from=build /app/urithiru .
