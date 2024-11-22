@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"flag"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -10,25 +12,28 @@ import (
 	"sync"
 )
 
-func main() {
+var addr = flag.String("addr", ":8080", "")
 
-	addr, ok := os.LookupEnv("ADDRESS")
-	if !ok {
-		addr = ":8080"
+func main() {
+	flag.Parse()
+
+	v, ok := os.LookupEnv("ADDRESS")
+	if ok {
+		*addr = v
 	}
 
-	listener, err := net.Listen("tcp", addr)
+	listener, err := net.Listen("tcp", *addr)
 	if err != nil {
 		slog.Error("Cannot create listener: "+err.Error(), "address", addr)
 		return
 	}
 
-	slog.Info("Listening", "address", addr)
+	slog.Info("Listening", "address", *addr)
 
 	var (
-		mu                   = &sync.Mutex{}
-		currentConns         int
-		mostConsecutiveConns int
+		mu                  = &sync.Mutex{}
+		conns               int
+		mostConcurrentConns int
 	)
 
 	ctx, _ := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
@@ -48,9 +53,10 @@ func main() {
 			}
 
 			mu.Lock()
-			currentConns++
-			if currentConns > mostConsecutiveConns {
-				mostConsecutiveConns = currentConns
+			conns++
+			fmt.Println(conns)
+			if conns > mostConcurrentConns {
+				mostConcurrentConns = conns
 			}
 			mu.Unlock()
 
@@ -59,17 +65,18 @@ func main() {
 					conn.Close()
 
 					mu.Lock()
-					currentConns--
+					conns--
+					fmt.Println(conns)
 					mu.Unlock()
 				}()
 
-				if _, err := conn.Write([]byte(addr)); err != nil {
+				if _, err := conn.Write([]byte(*addr)); err != nil {
 					slog.Error("Cannot write outgoing data: " + err.Error())
 					return
 				}
 
 				if _, err := io.Copy(conn, conn); err != nil {
-					slog.Error("Cannot read incoming data: " + err.Error())
+					slog.Error("Cannot echo data: " + err.Error())
 					return
 				}
 			}()
@@ -79,5 +86,5 @@ func main() {
 	<-ctx.Done()
 	listener.Close()
 
-	slog.Info("Goodbye", "most_consecutive_connections", mostConsecutiveConns)
+	slog.Info("Goodbye", "most_concurrent_connections", mostConcurrentConns)
 }

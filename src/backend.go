@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/pkg/errors"
@@ -23,7 +24,7 @@ type backend struct {
 	pingInterval          time.Duration
 	pingReconnectInterval time.Duration
 
-	mu *sync.Mutex
+	mu *sync.RWMutex
 
 	isAlive bool
 	conns   int
@@ -36,7 +37,7 @@ func newBackend(logger *slog.Logger, urithiruCfg *UrithiruConfig, proxyCfg *Prox
 		proxyCfg:              proxyCfg,
 		backendCfg:            backendCfg,
 		logger:                logger,
-		mu:                    &sync.Mutex{},
+		mu:                    &sync.RWMutex{},
 		pingTimeout:           or(backendCfg.PingTimeout, proxyCfg.PingTimeout, urithiruCfg.PingTimeout),
 		pingInterval:          or(backendCfg.PingInterval, proxyCfg.PingInterval, urithiruCfg.PingInterval),
 		pingReconnectInterval: or(backendCfg.PingReconnectInterval, proxyCfg.PingReconnectInterval, urithiruCfg.PingReconnectInterval),
@@ -48,7 +49,10 @@ func newBackend(logger *slog.Logger, urithiruCfg *UrithiruConfig, proxyCfg *Prox
 
 func (b *backend) ping() {
 beginning:
+
+	b.mu.Lock()
 	b.isAlive = false
+	b.mu.Unlock()
 
 	conn, err := net.Dial("tcp", b.backendCfg.Addr)
 	if err != nil {
@@ -57,7 +61,10 @@ beginning:
 	}
 
 	b.logger.Info("Backend connected", "address", b.backendCfg.Addr)
+
+	b.mu.Lock()
 	b.isAlive = true
+	b.mu.Unlock()
 
 	for {
 		conn.SetWriteDeadline(time.Now().Add(b.pingTimeout))
@@ -68,7 +75,10 @@ beginning:
 			b.logger.Warn("Backend unresponsive: "+err.Error(), "address", b.backendCfg.Addr)
 			goto beginning
 		}
+
+		b.mu.Lock()
 		b.latency = time.Now().Sub(start)
+		b.mu.Unlock()
 
 		time.Sleep(b.pingInterval)
 	}
@@ -96,8 +106,8 @@ func (b *backend) pipe(frontConn net.Conn) error {
 	errChan := make(chan error, 1)
 
 	go func() {
-		io.Copy(frontConn, backConn)
-		errChan <- nil
+		_, err := io.Copy(frontConn, backConn)
+		errChan <- err
 	}()
 
 	go func() {
@@ -105,7 +115,13 @@ func (b *backend) pipe(frontConn net.Conn) error {
 		errChan <- err
 	}()
 
-	return errors.Wrap(<-errChan, "cannot copy to backend connection")
+	if err := <-errChan; err != nil {
+		if !errors.Is(err, net.ErrClosed) && !errors.Is(err, syscall.ECONNRESET) && !errors.Is(err, syscall.EPIPE) {
+			return errors.Wrap(err, "cannot copy")
+		}
+	}
+
+	return nil
 }
 
 func or[T comparable](s ...T) (ret T) {

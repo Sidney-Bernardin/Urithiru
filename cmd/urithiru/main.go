@@ -23,7 +23,7 @@ var servePPROF func() error
 func main() {
 	flag.Parse()
 	errs := &errgroup.Group{}
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{}))
 
 	if servePPROF != nil {
 		logger.Info("PPROF listening", "address", *pprofAddr)

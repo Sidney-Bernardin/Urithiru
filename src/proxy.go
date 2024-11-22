@@ -22,23 +22,30 @@ func StartProxy(logger *slog.Logger, urithiruCfg *UrithiruConfig, proxyCfg *Prox
 	logger.Info("Proxy listening", "name", proxyCfg.Name, "address", proxyCfg.Addr)
 
 	for {
-		conn, _ := listener.Accept()
+		conn, err := listener.Accept()
+		if err != nil {
+			logger.Error("Cannot accept connection: "+err.Error())
+			continue
+		}
 
 		tcpConn, ok := conn.(*net.TCPConn)
-		if conn != nil && !ok {
+		if !ok {
+			conn.Close()
+			continue
+		}
+
+		best := bestBackend(backends)
+		if best == nil {
+			conn.Close()
 			continue
 		}
 
 		go func() {
 			defer tcpConn.Close()
 
-			best := bestBackend(backends)
-			if best == nil {
-				return
-			}
 
 			if err := best.pipe(tcpConn); err != nil {
-				slog.Error("Cannot pipe connection to backend: "+err.Error(), "address", best.backendCfg.Addr)
+				logger.Error("Cannot pipe connection to backend: "+err.Error(), "address", best.backendCfg.Addr)
 			}
 		}()
 	}
@@ -46,23 +53,32 @@ func StartProxy(logger *slog.Logger, urithiruCfg *UrithiruConfig, proxyCfg *Prox
 
 func bestBackend(backends []*backend) (best *backend) {
 	for _, b := range backends {
+		b.mu.RLock()
+
 		if !b.isAlive {
+			b.mu.RUnlock()
 			continue
 		}
 
 		if b.conns == 0 {
+			b.mu.RUnlock()
 			best = b
 			break
 		}
 
 		if best == nil {
+			b.mu.RUnlock()
 			best = b
 			continue
 		}
 
 		if (b.conns < best.conns) || (b.conns == best.conns && b.latency < best.latency) {
+			b.mu.RUnlock()
 			best = b
+			continue
 		}
+
+		b.mu.RUnlock()
 	}
 
 	return best
