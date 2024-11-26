@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log/slog"
 	"net"
@@ -18,16 +19,16 @@ var (
 	pprofAddr  = flag.String("pprof_addr", ":6060", "")
 )
 
-var servePPROF func() error
+var servePPROF func(context.Context, *slog.Logger) error
 
 func main() {
 	flag.Parse()
-	errs := &errgroup.Group{}
+	errs, ctx := errgroup.WithContext(context.Background())
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{}))
 
 	if servePPROF != nil {
 		logger.Info("PPROF listening", "address", *pprofAddr)
-		errs.Go(servePPROF)
+		errs.Go(func() error { return servePPROF(ctx, logger) })
 	}
 
 	urithiruCfg, err := src.GetConfig(*configPath)
@@ -38,7 +39,7 @@ func main() {
 
 	for _, proxyCfg := range urithiruCfg.Proxies {
 		errs.Go(func() error {
-			err := src.StartProxy(logger, urithiruCfg, &proxyCfg)
+			err := src.StartProxy(ctx, logger, urithiruCfg, &proxyCfg)
 			return errors.Wrap(err, "cannot serve proxy")
 		})
 	}

@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"net"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/pkg/errors"
@@ -24,7 +23,7 @@ type backend struct {
 	pingInterval          time.Duration
 	pingReconnectInterval time.Duration
 
-	mu *sync.RWMutex
+	mu *sync.Mutex
 
 	isAlive bool
 	conns   int
@@ -37,7 +36,7 @@ func newBackend(logger *slog.Logger, urithiruCfg *UrithiruConfig, proxyCfg *Prox
 		proxyCfg:              proxyCfg,
 		backendCfg:            backendCfg,
 		logger:                logger,
-		mu:                    &sync.RWMutex{},
+		mu:                    &sync.Mutex{},
 		pingTimeout:           or(backendCfg.PingTimeout, proxyCfg.PingTimeout, urithiruCfg.PingTimeout),
 		pingInterval:          or(backendCfg.PingInterval, proxyCfg.PingInterval, urithiruCfg.PingInterval),
 		pingReconnectInterval: or(backendCfg.PingReconnectInterval, proxyCfg.PingReconnectInterval, urithiruCfg.PingReconnectInterval),
@@ -115,13 +114,7 @@ func (b *backend) pipe(frontConn net.Conn) error {
 		errChan <- err
 	}()
 
-	if err := <-errChan; err != nil {
-		if !errors.Is(err, net.ErrClosed) && !errors.Is(err, syscall.ECONNRESET) && !errors.Is(err, syscall.EPIPE) {
-			return errors.Wrap(err, "cannot copy")
-		}
-	}
-
-	return nil
+	return errors.Wrap(<-errChan, "cannot copy")
 }
 
 func or[T comparable](s ...T) (ret T) {

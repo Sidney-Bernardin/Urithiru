@@ -6,6 +6,8 @@
 [[ proxies ]]
 name = "foo"
 addr = ":8100"
+# tls_cert = "abc.cert"
+# tls_key = "abc.key"
 
 # [[ proxies.backends ]]
 # addr = "1.2.3.4:8080"

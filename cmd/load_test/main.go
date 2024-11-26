@@ -30,7 +30,7 @@ var (
 	heapAlloc string
 	latency   time.Duration
 
-	mu    = &sync.Mutex{}
+	mu    = &sync.RWMutex{}
 	conns int
 )
 
@@ -38,8 +38,12 @@ func main() {
 	flag.Parse()
 	errChan := make(chan error, 1)
 
-	go func() { errChan <- errors.Wrap(getHeapAlloc(), "cannot get heap alloc") }()
-	go func() { errChan <- errors.Wrap(getLatency(), "cannot get latency") }()
+	go func() {
+		if err := <-errChan; err != nil {
+			slog.Error(err.Error())
+		}
+		os.Exit(1)
+	}()
 
 	if *concurrentConns != -1 && *reqsPerSec == -1 {
 		for i := range *concurrentConns {
@@ -50,16 +54,15 @@ func main() {
 		}
 	}
 
+	go func() { errChan <- errors.Wrap(getHeapAlloc(), "cannot get heap alloc") }()
+	go func() { errChan <- errors.Wrap(getLatency(), "cannot get latency") }()
+
 	ticker := time.NewTicker(time.Second / 2)
-
 	fmt.Println("Time,Heap Alloc,Latency")
-	for {
-		select {
-		case err := <-errChan:
-			slog.Error(err.Error())
-			return
 
-		case <-ticker.C:
+	for {
+		<-ticker.C
+		if conns == *concurrentConns {
 			fmt.Printf("%s,%s,%s\n", time.Now().Sub(start), heapAlloc, latency)
 		}
 	}
@@ -67,10 +70,6 @@ func main() {
 
 func handleNewConn(pingInterval time.Duration) error {
 	conn, err := net.Dial("tcp", *targetAddr)
-	defer func() {
-		fmt.Println(conns, err)
-		os.Exit(1)
-	}()
 	if err != nil {
 		return errors.Wrapf(err, "cannot dial target with %v concurrent connections", conns)
 	}
@@ -88,8 +87,7 @@ func handleNewConn(pingInterval time.Duration) error {
 	}()
 
 	for {
-		_, err = conn.Write([]byte(`PING`))
-		if err != nil {
+		if _, err = conn.Write([]byte(`PING`)); err != nil {
 			return errors.Wrapf(err, "cannot write ping message with %v concurrent connections", conns)
 		}
 
@@ -118,6 +116,7 @@ func getHeapAlloc() error {
 }
 
 func getLatency() (err error) {
+
 	var conn net.Conn
 	defer func() {
 		if conn != nil {

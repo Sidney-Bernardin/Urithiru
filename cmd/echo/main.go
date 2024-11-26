@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -54,7 +53,7 @@ func main() {
 
 			mu.Lock()
 			conns++
-			fmt.Println(conns)
+			slog.Info("New connection", "current_connections", conns)
 			if conns > mostConcurrentConns {
 				mostConcurrentConns = conns
 			}
@@ -66,7 +65,7 @@ func main() {
 
 					mu.Lock()
 					conns--
-					fmt.Println(conns)
+					slog.Info("Connection closed", "current_connections", conns)
 					mu.Unlock()
 				}()
 

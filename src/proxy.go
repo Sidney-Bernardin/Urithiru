@@ -1,37 +1,40 @@
 package src
 
 import (
+	"context"
+	"crypto/tls"
 	"log/slog"
 	"net"
+	"syscall"
 
 	"github.com/pkg/errors"
 )
 
-func StartProxy(logger *slog.Logger, urithiruCfg *UrithiruConfig, proxyCfg *ProxyConfig) error {
+func StartProxy(ctx context.Context, logger *slog.Logger, urithiruCfg *UrithiruConfig, proxyCfg *ProxyConfig) error {
 
 	backends := make([]*backend, len(proxyCfg.Backends))
 	for i, backendCfg := range proxyCfg.Backends {
 		backends[i] = newBackend(logger, urithiruCfg, proxyCfg, &backendCfg)
 	}
 
-	listener, err := net.Listen("tcp", proxyCfg.Addr)
+	listener, isTLS, err := newListener(proxyCfg)
 	if err != nil {
 		return errors.Wrap(err, "cannot create listener")
 	}
+	defer listener.Close()
 
-	logger.Info("Proxy listening", "name", proxyCfg.Name, "address", proxyCfg.Addr)
+	logger.Info("Proxy listening", "name", proxyCfg.Name, "address", proxyCfg.Addr, "TLS", isTLS)
 
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			logger.Error("Cannot accept connection: "+err.Error())
-			continue
-		}
-
-		tcpConn, ok := conn.(*net.TCPConn)
-		if !ok {
-			conn.Close()
-			continue
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+				logger.Error("Cannot accept connection: " + err.Error())
+				continue
+			}
 		}
 
 		best := bestBackend(backends)
@@ -41,44 +44,55 @@ func StartProxy(logger *slog.Logger, urithiruCfg *UrithiruConfig, proxyCfg *Prox
 		}
 
 		go func() {
-			defer tcpConn.Close()
+			defer conn.Close()
 
-
-			if err := best.pipe(tcpConn); err != nil {
-				logger.Error("Cannot pipe connection to backend: "+err.Error(), "address", best.backendCfg.Addr)
+			if err := best.pipe(conn); err != nil {
+				if !errors.Is(err, net.ErrClosed) && !errors.Is(err, syscall.ECONNRESET) && !errors.Is(err, syscall.EPIPE) {
+					logger.Error("Cannot pipe connection to backend: "+err.Error(), "address", best.backendCfg.Addr)
+				}
 			}
 		}()
 	}
 }
 
+func newListener(proxyCfg *ProxyConfig) (net.Listener, bool, error) {
+	if proxyCfg.TLSCert == "" && proxyCfg.TLSKey == "" {
+		ln, err := net.Listen("tcp", proxyCfg.Addr)
+		return ln, false, errors.Wrap(err, "cannot create listener")
+	}
+
+	cert, err := tls.LoadX509KeyPair(proxyCfg.TLSCert, proxyCfg.TLSKey)
+	if err != nil {
+		return nil, false, errors.Wrap(err, "cannot load x509 key pair")
+	}
+
+	ln, err := tls.Listen("tcp", proxyCfg.Addr, &tls.Config{
+		Certificates: []tls.Certificate{cert},
+	})
+
+	return ln, ln != nil, errors.Wrap(err, "cannot create TLS listener")
+}
+
 func bestBackend(backends []*backend) (best *backend) {
 	for _, b := range backends {
-		b.mu.RLock()
-
 		if !b.isAlive {
-			b.mu.RUnlock()
 			continue
 		}
 
 		if b.conns == 0 {
-			b.mu.RUnlock()
 			best = b
 			break
 		}
 
 		if best == nil {
-			b.mu.RUnlock()
 			best = b
 			continue
 		}
 
 		if (b.conns < best.conns) || (b.conns == best.conns && b.latency < best.latency) {
-			b.mu.RUnlock()
 			best = b
 			continue
 		}
-
-		b.mu.RUnlock()
 	}
 
 	return best
