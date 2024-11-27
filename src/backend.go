@@ -12,6 +12,7 @@ import (
 
 var pingMsg = []byte(`p`)
 
+// backend represents a single server on the backend.
 type backend struct {
 	urithiruCfg *UrithiruConfig
 	proxyCfg    *ProxyConfig
@@ -46,6 +47,7 @@ func newBackend(logger *slog.Logger, urithiruCfg *UrithiruConfig, proxyCfg *Prox
 	return b
 }
 
+// ping monitors the backend server's health and latency by repeatedly writing it pings messages.
 func (b *backend) ping() {
 beginning:
 
@@ -53,6 +55,7 @@ beginning:
 	b.isAlive = false
 	b.mu.Unlock()
 
+	// Connect to the backend server.
 	conn, err := net.Dial("tcp", b.backendCfg.Addr)
 	if err != nil {
 		time.Sleep(b.pingReconnectInterval)
@@ -67,8 +70,9 @@ beginning:
 
 	for {
 		conn.SetWriteDeadline(time.Now().Add(b.pingTimeout))
-
 		start := time.Now()
+
+		// Write ping message.
 		if _, err := conn.Write(pingMsg); err != nil {
 			conn.Close()
 			b.logger.Warn("Backend unresponsive: "+err.Error(), "address", b.backendCfg.Addr)
@@ -83,8 +87,10 @@ beginning:
 	}
 }
 
+// pip copies data to and from the backend server.
 func (b *backend) pipe(frontConn net.Conn) error {
 
+	// Connect to the backend server.
 	backConn, _ := net.Dial("tcp", b.backendCfg.Addr)
 	if backConn == nil {
 		return nil
@@ -117,6 +123,7 @@ func (b *backend) pipe(frontConn net.Conn) error {
 	return errors.Wrap(<-errChan, "cannot copy")
 }
 
+// or returns the first non-zero value from s.
 func or[T comparable](s ...T) (ret T) {
 	for _, v := range s {
 		if v != ret {

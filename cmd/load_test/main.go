@@ -21,10 +21,9 @@ type stage struct {
 }
 
 var (
-	targetAddr      = flag.String("target-addr", "localhost:8000", "")
-	pprofURL        = flag.String("pprof-url", "http://localhost:6060/debug/pprof", "")
-	reqsPerSec      = flag.Int("reqs-per-sec", -1, "")
-	concurrentConns = flag.Int("concurrent-conns", -1, "")
+	targetAddr      = flag.String("target-addr", "localhost:8000", "Address of the target server.")
+	pprofURL        = flag.String("pprof-url", "http://localhost:6060/debug/pprof", "URL of the target server's PPROF endpoint.")
+	concurrentConns = flag.Int("concurrent-conns", 0, "Number of concurrent connections to establish to the target server.")
 
 	start     = time.Now()
 	heapAlloc string
@@ -45,13 +44,11 @@ func main() {
 		os.Exit(1)
 	}()
 
-	if *concurrentConns != -1 && *reqsPerSec == -1 {
-		for i := range *concurrentConns {
-			pingInterval := time.Second * time.Duration((i%2)+1)
-			go func() {
-				errChan <- errors.Wrap(handleNewConn(pingInterval), "cannot handle TCP connection to target")
-			}()
-		}
+	for i := range *concurrentConns {
+		pingInterval := time.Second * time.Duration((i%2)+1)
+		go func() {
+			errChan <- errors.Wrap(handleNewConn(pingInterval), "cannot handle TCP connection to target")
+		}()
 	}
 
 	go func() { errChan <- errors.Wrap(getHeapAlloc(), "cannot get heap alloc") }()

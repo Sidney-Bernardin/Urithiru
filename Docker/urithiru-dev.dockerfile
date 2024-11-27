@@ -5,10 +5,12 @@ ENV BUILD_TAGS=$BUILD_TAGS
 
 WORKDIR /app
 
+# Copy and install golang dependencies.
 COPY go.* .
 RUN go mod download
-COPY . .
 
+# Copy everything and build.
+COPY . .
 RUN --mount=type=cache,target=/root/.cache/go-build \
     go build -tags="${BUILD_TAGS}" -o urithiru ./cmd/urithiru/.
 
@@ -16,9 +18,10 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 
 FROM scratch
 
-ARG CONFIG="urithiru.toml"
+ARG CONFIG="default.toml"
 ENV CONFIG=$CONFIG
 
+# Copy the binary and config file from the build stage.
 COPY --from=build /app/urithiru .
 COPY --from=build /app/${CONFIG} /etc/urithiru/config.toml
 

@@ -35,7 +35,8 @@ type PingConfig struct {
 	PingReconnectInterval time.Duration `toml:"ping_reconnect_interval"`
 }
 
-func GetConfig(path string) (*UrithiruConfig, error) {
+// GetConfig returns a new UrithiruConfig resembling the contents of the given file.
+func GetConfig(cfgPath string) (*UrithiruConfig, error) {
 	cfg := UrithiruConfig{
 		PingConfig: PingConfig{
 			PingTimeout:           10 * time.Second,
@@ -44,7 +45,8 @@ func GetConfig(path string) (*UrithiruConfig, error) {
 		},
 	}
 
-	if _, err := toml.DecodeFile(path, &cfg); err != nil {
+	// Decode the config file.
+	if _, err := toml.DecodeFile(cfgPath, &cfg); err != nil {
 		return nil, errors.Wrap(err, "cannot decode configuration file")
 	}
 

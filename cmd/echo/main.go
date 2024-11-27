@@ -11,7 +11,7 @@ import (
 	"sync"
 )
 
-var addr = flag.String("addr", ":8080", "")
+var addr = flag.String("addr", ":8080", "Address to listen on.")
 
 func main() {
 	flag.Parse()
