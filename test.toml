@@ -1,0 +1,14 @@
+[[ proxies ]]
+name = "foo"
+addr = ":8000"
+# tls_cert = "cert.cert"
+# tls_key = "key.key"
+
+[[ proxies.backends ]]
+addr = ":8001"
+
+[[ proxies.backends ]]
+addr = ":8002"
+
+[[ proxies.backends ]]
+addr = ":8003"
