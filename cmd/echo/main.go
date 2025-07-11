@@ -3,18 +3,37 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
+	"io"
+	"log/slog"
 	"net/http"
+	"os"
 )
 
-var addr = flag.String("addr", ":8000", "")
+var addr = flag.String("addr", ":8000", "Address to listen on.")
 
 func main() {
 	flag.Parse()
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{})))
 
-	log.Println("Listening on", *addr)
-	log.Fatal(http.ListenAndServe(*addr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("Hello, %s!", r.UserAgent())
-		fmt.Fprintf(w, "Hello, %s!", r.UserAgent())
-	})))
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+
+		b, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			slog.Error("Cannot read request body", "err", err.Error())
+			return
+		}
+
+		fmt.Println(string(b))
+
+		if _, err := w.Write(b); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			slog.Error("Cannot write response", "err", err.Error())
+		}
+	})
+
+	slog.Info("Ready", "addr", *addr)
+	if err := http.ListenAndServe(*addr, nil); err != nil {
+		slog.Error("Cannot listen and serve", "err", err.Error())
+	}
 }

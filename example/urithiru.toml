@@ -1,0 +1,12 @@
+[[ proxies ]]
+name = "test"
+addr = ":8080"
+
+[[ proxies.backends ]]
+addr = "echo_a:8000"
+
+[[ proxies.backends ]]
+addr = "echo_b:8000"
+
+[[ proxies.backends ]]
+addr = "echo_c:8000"

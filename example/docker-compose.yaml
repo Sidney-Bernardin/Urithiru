@@ -1,0 +1,38 @@
+services:
+
+  echo_a:
+    container_name: echo_a
+    build: cmd/echo
+
+  echo_b:
+    container_name: echo_b
+    build: cmd/echo
+
+  echo_c:
+    container_name: echo_c
+    build: cmd/echo
+
+  urithiru:
+    build:
+      dockerfile: cmd/urithiru/prod.dockerfile
+    ports:
+      - 8080:8080
+    volumes:
+      - ./example/urithiru.toml:/etc/urithiru/config.toml
+    depends_on:
+      - echo_a
+      - echo_b
+      - echo_c
+    profiles: [urithiru]
+
+  nginx:
+    image: nginx:latest
+    ports:
+      - 8080:8080
+    volumes:
+      - ./example/nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - echo_a
+      - echo_b
+      - echo_c
+    profiles: [nginx]
