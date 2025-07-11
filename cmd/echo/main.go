@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -24,7 +23,7 @@ func main() {
 			return
 		}
 
-		fmt.Println(string(b))
+		// fmt.Println(string(b))
 
 		if _, err := w.Write(b); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)

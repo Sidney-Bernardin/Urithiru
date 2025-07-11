@@ -13,6 +13,7 @@ services:
     build: cmd/echo
 
   urithiru:
+    container_name: urithiru
     build:
       dockerfile: cmd/urithiru/prod.dockerfile
     ports:
@@ -26,7 +27,8 @@ services:
     profiles: [urithiru]
 
   nginx:
-    image: nginx:latest
+    container_name: nginx
+    image: nginx:alpine
     ports:
       - 8080:8080
     volumes:
@@ -36,3 +38,16 @@ services:
       - echo_b
       - echo_c
     profiles: [nginx]
+
+  haproxy:
+    container_name: haproxy
+    image: haproxy:alpine
+    ports:
+      - 8080:8080
+    volumes:
+      - ./example/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg
+    depends_on:
+      - echo_a
+      - echo_b
+      - echo_c
+    profiles: [haproxy]
