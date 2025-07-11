@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"log/slog"
 	"net/http"
 	_ "net/http/pprof"
@@ -69,7 +68,8 @@ func main() {
 
 			slog.Info("Proxy ready",
 				"name", proxyCfg.Name,
-				"addr", proxyCfg.Addr)
+				"addr", proxyCfg.Addr,
+				"buf_size", proxyCfg.BufferSize)
 
 			proxy.Run()
 		}()
@@ -88,7 +88,6 @@ func main() {
 	}
 
 	if pprofServer != nil {
-		fmt.Println("hofhwofj")
 
 		// Shutdown PPROF server.
 		logger.Info("Gracefully shutting down PPROF server")

@@ -16,11 +16,12 @@ type UrithiruConfig struct {
 type ProxyConfig struct {
 	PingConfig
 
-	Name     string          `toml:"name"`
-	Addr     string          `toml:"addr"`
-	TLSCert  string          `toml:"tls_cert"`
-	TLSKey   string          `toml:"tls_key"`
-	Backends []BackendConfig `toml:"backends"`
+	Name       string          `toml:"name"`
+	Addr       string          `toml:"addr"`
+	BufferSize int             `toml:"buffer_size"`
+	TLSCert    string          `toml:"tls_cert"`
+	TLSKey     string          `toml:"tls_key"`
+	Backends   []BackendConfig `toml:"backends"`
 }
 
 type BackendConfig struct {

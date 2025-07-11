@@ -1,6 +1,7 @@
 [[ proxies ]]
 name = "test"
 addr = ":8080"
+buffer_size = 1024
 
 [[ proxies.backends ]]
 addr = "echo_a:8000"

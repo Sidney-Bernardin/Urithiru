@@ -111,12 +111,12 @@ func (b *backend) pipe(frontConn net.Conn) error {
 	errChan := make(chan error, 1)
 
 	go func() {
-		_, err := io.CopyBuffer(frontConn, backConn, make([]byte, 1024))
+		_, err := io.CopyBuffer(frontConn, backConn, make([]byte, b.proxyCfg.BufferSize))
 		errChan <- err
 	}()
 
 	go func() {
-		_, err := io.CopyBuffer(backConn, frontConn, make([]byte, 1024))
+		_, err := io.CopyBuffer(backConn, frontConn, make([]byte, b.proxyCfg.BufferSize))
 		errChan <- err
 	}()
 

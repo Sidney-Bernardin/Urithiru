@@ -1,38 +1,29 @@
 package main
 
 import (
+	"bytes"
 	"flag"
-	"io"
 	"log/slog"
-	"net/http"
 	"os"
+
+	"github.com/valyala/fasthttp"
 )
 
-var addr = flag.String("addr", ":8000", "Address to listen on.")
+var (
+	addr         = flag.String("addr", ":8000", "Address to listen on.")
+	responseSize = flag.Int("response_size", 1024*1024, "Address to listen on.")
+)
 
 func main() {
 	flag.Parse()
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{})))
+	response := bytes.Repeat([]byte("a"), *responseSize)
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-
-		b, err := io.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			slog.Error("Cannot read request body", "err", err.Error())
-			return
-		}
-
-		// fmt.Println(string(b))
-
-		if _, err := w.Write(b); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+	slog.Info("Ready", "addr", *addr)
+	err := fasthttp.ListenAndServe(*addr, func(ctx *fasthttp.RequestCtx) {
+		if _, err := ctx.Write(response); err != nil {
 			slog.Error("Cannot write response", "err", err.Error())
 		}
 	})
-
-	slog.Info("Ready", "addr", *addr)
-	if err := http.ListenAndServe(*addr, nil); err != nil {
-		slog.Error("Cannot listen and serve", "err", err.Error())
-	}
+	slog.Error("Cannot listen and serve", "err", err.Error())
 }
