@@ -28,14 +28,19 @@ type backend struct {
 }
 
 func newBackend(logger *slog.Logger, urithiruCfg *UrithiruConfig, proxyCfg *ProxyConfig, backendCfg *BackendConfig) *backend {
+	if backendCfg.PingTimeout == 0 {
+		backendCfg.PingTimeout = proxyCfg.PingTimeout
+	}
+	if backendCfg.PingInterval == 0 {
+		backendCfg.PingInterval = proxyCfg.PingInterval
+	}
+
 	b := &backend{
-		urithiruCfg:  urithiruCfg,
-		proxyCfg:     proxyCfg,
-		backendCfg:   backendCfg,
-		logger:       logger,
-		mu:           &sync.Mutex{},
-		pingTimeout:  or(backendCfg.PingTimeout, proxyCfg.PingTimeout, urithiruCfg.PingTimeout),
-		pingInterval: or(backendCfg.PingInterval, proxyCfg.PingInterval, urithiruCfg.PingInterval),
+		urithiruCfg: urithiruCfg,
+		proxyCfg:    proxyCfg,
+		backendCfg:  backendCfg,
+		logger:      logger,
+		mu:          &sync.Mutex{},
 	}
 
 	go b.ping()
@@ -121,14 +126,4 @@ func (b *backend) pipe(frontConn net.Conn) error {
 	}()
 
 	return errors.Wrap(<-errChan, "cannot copy")
-}
-
-// or returns the first non-zero value from s.
-func or[T comparable](s ...T) (ret T) {
-	for _, v := range s {
-		if v != ret {
-			return v
-		}
-	}
-	return ret
 }

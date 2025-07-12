@@ -5,6 +5,8 @@
 [[ proxies ]]
 name = "foo"
 addr = ":8001"
+buffer_size = 1024
+
 # tls_cert = "abc.cert"
 # tls_key = "abc.key"
 

@@ -52,10 +52,6 @@ func main() {
 	// Create proxies.
 	proxies := []*internal.Proxy{}
 	for _, proxyCfg := range urithiruCfg.Proxies {
-		if len(proxyCfg.Backends) == 0 {
-			continue
-		}
-
 		go func() {
 			defer cancel()
 
@@ -64,13 +60,8 @@ func main() {
 				logger.Error("Cannot create proxy", "err", err.Error())
 				return
 			}
+
 			proxies = append(proxies, proxy)
-
-			slog.Info("Proxy ready",
-				"name", proxyCfg.Name,
-				"addr", proxyCfg.Addr,
-				"buf_size", proxyCfg.BufferSize)
-
 			proxy.Run()
 		}()
 	}
@@ -90,7 +81,6 @@ func main() {
 	if pprofServer != nil {
 
 		// Shutdown PPROF server.
-		logger.Info("Gracefully shutting down PPROF server")
 		shutdownCtx, shutdownCancel := context.WithTimeout(ctx, 5*time.Second)
 		defer shutdownCancel()
 		if err := pprofServer.Shutdown(shutdownCtx); err != nil {

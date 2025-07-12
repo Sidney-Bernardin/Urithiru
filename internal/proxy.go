@@ -20,6 +20,15 @@ type Proxy struct {
 }
 
 func NewProxy(ctx context.Context, logger *slog.Logger, urithiruCfg *UrithiruConfig, proxyCfg *ProxyConfig) (*Proxy, error) {
+	if proxyCfg.BufferSize == 0 {
+		proxyCfg.BufferSize = 1024
+	}
+	if proxyCfg.PingTimeout == 0 {
+		proxyCfg.PingTimeout = urithiruCfg.PingTimeout
+	}
+	if proxyCfg.PingInterval == 0 {
+		proxyCfg.PingInterval = urithiruCfg.PingInterval
+	}
 
 	// Create backends.
 	backends := make([]*backend, len(proxyCfg.Backends))
@@ -50,6 +59,15 @@ func (p *Proxy) Close() error {
 
 // Run continuously accepts connections to be forwarded to a configured backend.
 func (p *Proxy) Run() {
+	if len(p.backends) == 0 {
+		return
+	}
+
+	slog.Info("Proxy ready",
+		"name", p.proxyCfg.Name,
+		"addr", p.proxyCfg.Addr,
+		"buf_size", p.proxyCfg.BufferSize)
+
 	for {
 
 		// Accept next connection.
@@ -108,7 +126,7 @@ func newListener(proxyCfg *ProxyConfig) (net.Listener, error) {
 
 // bestBackend returns the given backend with the least number of connections.
 func (p *Proxy) bestBackend() *backend {
-	ret := p.backends[0]
+	var ret *backend
 
 	for _, b := range p.backends[1:] {
 		if !b.isAlive {
