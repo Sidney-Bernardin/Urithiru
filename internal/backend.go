@@ -17,9 +17,6 @@ type backend struct {
 	proxyCfg    *ProxyConfig
 	backendCfg  *BackendConfig
 
-	pingTimeout  time.Duration
-	pingInterval time.Duration
-
 	logger  *slog.Logger
 	mu      *sync.Mutex
 	isAlive bool
@@ -60,7 +57,7 @@ func (b *backend) ping() {
 			b.logger.Error("Cannot dial backend",
 				"err", err.Error(),
 				"backend_addr", b.backendCfg.Addr)
-			time.Sleep(b.pingInterval)
+			time.Sleep(b.backendCfg.PingInterval)
 			continue
 		}
 
@@ -72,7 +69,7 @@ func (b *backend) ping() {
 
 		// Ping loop.
 		for {
-			conn.SetWriteDeadline(time.Now().Add(b.pingTimeout))
+			conn.SetWriteDeadline(time.Now().Add(b.backendCfg.PingTimeout))
 			start := time.Now()
 
 			if _, err := conn.Write(pingMsg); err != nil {
@@ -87,7 +84,7 @@ func (b *backend) ping() {
 			b.latency = time.Now().Sub(start)
 			b.mu.Unlock()
 
-			time.Sleep(b.pingInterval)
+			time.Sleep(b.backendCfg.PingInterval)
 		}
 	}
 }

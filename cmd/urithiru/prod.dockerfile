@@ -5,10 +5,10 @@ ENV BUILD_TAGS=$BUILD_TAGS
 
 WORKDIR /app
 
-COPY ../../go.* .
+COPY go.* .
 RUN go mod download
+COPY . .
 
-COPY ../../ .
 RUN go build -tags="${BUILD_TAGS}" -o urithiru ./cmd/urithiru/.
 
 # ==========

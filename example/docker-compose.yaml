@@ -2,19 +2,34 @@ services:
 
   echo_a:
     container_name: echo_a
-    build: cmd/echo
+    build:
+      context: .
+      dockerfile: cmd/echo/Dockerfile
+    ports:
+      - 8001:8000
 
   echo_b:
     container_name: echo_b
-    build: cmd/echo
+    build:
+      context: .
+      dockerfile: cmd/echo/Dockerfile
+    ports:
+      - 8002:8000
 
   echo_c:
     container_name: echo_c
-    build: cmd/echo
+    build:
+      context: .
+      dockerfile: cmd/echo/Dockerfile
+    ports:
+      - 8003:8000
+
+  # =====
 
   urithiru:
     container_name: urithiru
     build:
+      context: .
       dockerfile: cmd/urithiru/prod.dockerfile
     ports:
       - 8080:8080
