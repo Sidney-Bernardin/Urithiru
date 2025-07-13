@@ -5,7 +5,7 @@
 1. [Usage](#usage)
 
 ## Overview
-This is a layer-4 reverse proxy that can be easily configured with a .toml file.
+Urithiru is a layer-4 reverse-proxy and load-balancer that can be easily configured with a .toml file.
 
 For more on how this project works, visit my [portfolio](https://sidney-bernardin.github.io/project/?id=urithiru).
 
@@ -36,8 +36,9 @@ Usage of urithiru:
 ```
 
 ### Configuration guide
+Easily configure with a .toml file.
 ```toml
-# All default values
+# All default values.
 
 pingTimeout = "10s" # Timeout for a backend ping message.
 pingInterval = "1s" # Frequency of backend ping messages.
