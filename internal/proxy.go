@@ -126,7 +126,7 @@ func newListener(proxyCfg *ProxyConfig) (net.Listener, error) {
 
 // bestBackend returns the given backend with the least number of connections.
 func (p *Proxy) bestBackend() *backend {
-	var ret *backend
+	ret := p.backends[0]
 
 	for _, b := range p.backends[1:] {
 		if !b.isAlive {
