@@ -1,7 +1,5 @@
 # Urithiru
 
-# Urithiru
-
 **Contents**
 1. [Overview](#overview)
 1. [Usage](#usage)
