@@ -7,7 +7,7 @@
 ## Overview
 Urithiru is a layer-4 reverse-proxy and load-balancer that can be easily configured using a .toml file.
 
-For more on how this project works, visit my [portfolio](https://sidney-bernardin.github.io/project/?id=urithiru).
+For more on how this project works, visit my [portfolio](https://sidney-bernardin.github.io).
 
 ## Usage
 
